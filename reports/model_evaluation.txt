@@ -1,0 +1,199 @@
+MODEL EVALUATION REPORT
+=======================
+
+Project: AI-Based Diabetic Retinopathy Screening and Severity Grading
+Model: EfficientNet-B0
+Framework: MATLAB R2026a
+Dataset: APTOS 2019
+
+1. OBJECTIVE
+------------
+The objective of this project is to develop an AI-based system for diabetic
+retinopathy (DR) screening and severity grading from retinal fundus images.
+
+The model performs five-class diabetic retinopathy severity classification:
+
+Level 0 - No Diabetic Retinopathy
+Level 1 - Mild Non-Proliferative Diabetic Retinopathy
+Level 2 - Moderate Non-Proliferative Diabetic Retinopathy
+Level 3 - Severe Non-Proliferative Diabetic Retinopathy
+Level 4 - Proliferative Diabetic Retinopathy
+
+For screening, Levels 0 and 1 are treated as Non-Referable DR, while
+Levels 2, 3, and 4 are treated as Referable DR.
+
+
+2. DATASET
+----------
+Dataset: APTOS 2019
+
+Total training images: 3662
+
+Class distribution:
+Level 0: 1805 images
+Level 1:  370 images
+Level 2:  999 images
+Level 3:  193 images
+Level 4:  295 images
+
+The dataset was divided using a reproducible randomized split:
+
+Training:   70% (2564 images)
+Validation: 15% (549 images)
+Testing:    15% (549 images)
+
+Random seed: 42
+
+Note:
+The APTOS dataset used in this project does not provide explicit patient IDs
+in the available training CSV. Therefore, the split is image-level rather
+than patient-level.
+
+
+3. IMAGE PROCESSING
+-------------------
+The EfficientNet-B0 network accepts images of size 224 x 224 x 3.
+
+The training pipeline uses:
+- Image resizing to 224 x 224 pixels
+- RGB fundus images
+- Training-time data augmentation
+- Random rotation: -10 to +10 degrees
+- Random X/Y translation
+- Random X/Y scaling: 0.9 to 1.1
+- Random horizontal reflection
+
+Validation and test images are not augmented.
+
+
+4. MODEL
+--------
+Base architecture: EfficientNet-B0
+
+The original ImageNet classification head was adapted for five diabetic
+retinopathy classes.
+
+A weighted cross-entropy loss was used to reduce the effect of class
+imbalance in the APTOS dataset.
+
+Optimizer: Adam
+Initial learning rate: 1e-4
+Mini-batch size: 32
+Maximum epochs: 10
+Early stopping: Enabled
+Validation-based best model selection: Enabled
+Execution environment: GPU
+
+
+5. TEST RESULTS
+---------------
+Test set size: 549 images
+
+Five-class classification accuracy:
+74.50%
+
+Macro F1-score:
+0.6063
+
+
+6. REFERABLE DR SCREENING RESULTS
+---------------------------------
+For screening, the five severity levels were grouped as follows:
+
+Non-Referable:
+Level 0, Level 1
+
+Referable:
+Level 2, Level 3, Level 4
+
+Results:
+
+Sensitivity (Recall): 87.00%
+Specificity:          96.32%
+Precision:            94.17%
+
+Binary confusion matrix:
+
+True Negative (TN): 314
+False Positive (FP):  12
+False Negative (FN):  29
+True Positive (TP):  194
+
+
+7. FIVE-CLASS CONFUSION MATRIX
+------------------------------
+                     Predicted
+              L0    L1    L2    L3    L4
+
+Actual L0     259    12     0     0     0
+Actual L1       7    39     7     1     1
+Actual L2       3    21    67    40    19
+Actual L3       0     1     2    19     7
+Actual L4       0     1     1    16    25
+
+
+8. PER-CLASS RECALL
+-------------------
+Level 0: 95.6%
+Level 1: 70.9%
+Level 2: 44.7%
+Level 3: 65.5%
+Level 4: 56.8%
+
+
+9. INTERPRETATION
+-----------------
+The model demonstrates stronger performance for the binary task of
+referable diabetic retinopathy screening than for detailed five-class
+severity grading.
+
+The model achieved 87.00% sensitivity and 96.32% specificity for
+referable DR screening.
+
+The main weakness in the five-class classification task is Moderate DR
+(Level 2). A substantial number of Level 2 images were classified as
+Level 3 or Level 4, while some were classified as Level 1.
+
+This indicates that the current model is better suited as a research
+prototype for DR screening than as a highly reliable severity-grading
+system.
+
+
+10. GRAD-CAM
+------------
+Grad-CAM was incorporated to provide visual interpretability.
+
+The Grad-CAM visualization highlights image regions that contribute to
+the model's prediction.
+
+Grad-CAM is used as an interpretability aid and should not be interpreted
+as definitive evidence that the model has detected a specific retinal
+lesion.
+
+
+11. LIMITATIONS
+---------------
+- The evaluation uses an image-level split because patient identifiers
+  were not available in the dataset used.
+- The dataset is class-imbalanced, particularly for Level 1 and Level 3.
+- Five-class severity classification performance is lower than binary
+  referable DR screening performance.
+- The model has not undergone clinical validation.
+- The reported results should not be interpreted as clinical diagnostic
+  performance.
+- External validation on independent datasets has not yet been performed.
+
+
+12. CONCLUSION
+--------------
+The EfficientNet-B0 baseline provides a functional AI prototype for
+diabetic retinopathy screening and severity classification.
+
+The results indicate that the current model has promising performance
+for identifying referable DR, while further work is required to improve
+five-class severity grading, particularly for Moderate DR.
+
+Future improvements may include additional training, improved retinal
+image preprocessing, stronger class-imbalance handling, external
+validation, and patient-level dataset splitting where patient identifiers
+are available.
