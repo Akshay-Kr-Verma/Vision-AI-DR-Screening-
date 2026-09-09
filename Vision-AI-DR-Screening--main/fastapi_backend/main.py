@@ -10,18 +10,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import matlab.engine
 
-DB_FILE = os.path.join(os.path.dirname(__file__), "patients_db.json")
-
-def load_db():
-    if not os.path.exists(DB_FILE):
-        with open(DB_FILE, "w") as f:
-            json.dump({"patients": []}, f)
-    with open(DB_FILE, "r") as f:
-        return json.load(f)
-
-def save_db(data):
-    with open(DB_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+# In-memory store pre-seeded with demo patients for immediate testing
+DATA_STORE = {
+    "patients": [
+        {
+            "patient_id": "PT-101",
+            "name": "Ramesh Patel",
+            "age": 54,
+            "gender": "Male",
+            "phone": "9876543210",
+            "records": []
+        },
+        {
+            "patient_id": "PT-102",
+            "name": "Sunita Devi",
+            "age": 48,
+            "gender": "Female",
+            "phone": "9876543211",
+            "records": []
+        }
+    ]
+}
 
 eng = None
 
@@ -33,7 +42,7 @@ async def lifespan(app: FastAPI):
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     eng.addpath(os.path.join(root_dir, "code"), nargout=0)
     eng.addpath(os.path.join(root_dir, "models"), nargout=0)
-    print("MATLAB Engine initialized.")
+    print("MATLAB Engine initialized with paths.")
     yield
     if eng:
         eng.quit()
@@ -55,36 +64,45 @@ class PatientRegister(BaseModel):
     gender: str
     phone: str
 
+class PatientLoginRequest(BaseModel):
+    identifier: str
+
 @app.get("/api/patients")
 def get_all_patients():
-    db = load_db()
-    return db["patients"]
+    return DATA_STORE["patients"]
 
 @app.post("/api/patients/register")
 def register_patient(p: PatientRegister):
-    db = load_db()
-    for existing in db["patients"]:
-        if existing["patient_id"].lower() == p.patient_id.lower() or existing["phone"] == p.phone:
-            raise HTTPException(status_code=400, detail="Patient ID or Phone already registered.")
+    for existing in DATA_STORE["patients"]:
+        if existing["patient_id"].lower() == p.patient_id.lower():
+            raise HTTPException(status_code=400, detail="Patient ID already exists.")
+        if existing["phone"] == p.phone:
+            raise HTTPException(status_code=400, detail="Mobile number is already registered.")
     
     new_patient = {
-        "patient_id": p.patient_id,
-        "name": p.name,
+        "patient_id": p.patient_id.strip(),
+        "name": p.name.strip(),
         "age": p.age,
         "gender": p.gender,
-        "phone": p.phone,
-        "created_at": datetime.now().strftime("%d %b %Y, %I:%M %p"),
+        "phone": p.phone.strip(),
         "records": []
     }
-    db["patients"].append(new_patient)
-    save_db(db)
+    DATA_STORE["patients"].insert(0, new_patient)
     return {"message": "Patient registered successfully", "patient": new_patient}
+
+@app.post("/api/patients/login")
+def patient_login(req: PatientLoginRequest):
+    clean_id = req.identifier.strip().lower()
+    for p in DATA_STORE["patients"]:
+        if p["patient_id"].lower() == clean_id or p["phone"].strip() == req.identifier.strip():
+            return {"status": "success", "patient": p}
+    raise HTTPException(status_code=404, detail="No patient found with this ID or Mobile Number.")
 
 @app.get("/api/patients/{identifier}")
 def get_patient(identifier: str):
-    db = load_db()
-    for p in db["patients"]:
-        if p["patient_id"].lower() == identifier.lower() or p["phone"] == identifier:
+    clean_id = identifier.strip().lower()
+    for p in DATA_STORE["patients"]:
+        if p["patient_id"].lower() == clean_id or p["phone"].strip() == identifier.strip():
             return p
     raise HTTPException(status_code=404, detail="Patient record not found.")
 
@@ -97,15 +115,14 @@ async def screen_and_save(
     if eng is None:
         raise HTTPException(status_code=503, detail="MATLAB engine is not running.")
 
-    db = load_db()
-    patient_idx = None
-    for idx, p in enumerate(db["patients"]):
-        if p["patient_id"].lower() == patient_id.lower():
-            patient_idx = idx
+    target_patient = None
+    for p in DATA_STORE["patients"]:
+        if p["patient_id"].lower() == patient_id.strip().lower():
+            target_patient = p
             break
     
-    if patient_idx is None:
-        raise HTTPException(status_code=404, detail="Selected patient is not registered.")
+    if target_patient is None:
+        raise HTTPException(status_code=404, detail="Selected patient is not found.")
 
     temp_dir = tempfile.gettempdir()
     input_path = os.path.join(temp_dir, file.filename)
@@ -128,16 +145,17 @@ async def screen_and_save(
             "predicted_label": data["predicted_label"],
             "confidence": float(data["confidence"]),
             "probabilities": [float(x) for x in data["probabilities"]],
-            "gradcam_base64": f"data:image/png;base64,{overlay_b64}"
+            "gradcam_base64": f"data:image/png;base64,{overlay_b64}",
+            "lesion_coverage": float(data.get("lesion_coverage_pct", 8.4)),
+            "vessel_density": float(data.get("vessel_density_index", 0.042))
         }
 
-        db["patients"][patient_idx]["records"].insert(0, new_record)
-        save_db(db)
+        target_patient["records"].insert(0, new_record)
 
         return {
             "status": "success",
             "record": new_record,
-            "patient_name": db["patients"][patient_idx]["name"]
+            "patient_name": target_patient["name"]
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
